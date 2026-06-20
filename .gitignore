@@ -1,0 +1,8 @@
+# Python virtual environment
+venv/
+__pycache__/
+
+# Data and Secrets
+data/
+*.env
+test_api.py
