@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 API_KEY = os.getenv("ESKOM_API_KEY")
 
-if not API_KEY :
+if not API_KEY or API_KEY == "your_actual_api_key_here":
     print("Error: Please put your real API key in the .env file!")
     exit()
 
@@ -14,11 +14,16 @@ headers = {"token": API_KEY}
 
 # Search for Tshwane to get its specific Area ID
 search_text = "Tshwane"
-search_url_updated = f"https://developer.sepush.co.za/business/3.0/areas_search?text={search_text}"
+search_url = f"https://developer.sepush.co.za/business/3.0/areas_search?text={search_text}"
 
 print(f"Searching for {search_text} Area ID using v3.0 API...")
-search_response = requests.get(search_url_updated, headers=headers)
+search_response = requests.get(search_url, headers=headers)
 
+# NEW DEBUGGING SECTION
+print(f"Status Code: {search_response.status_code}")
+# print("Raw API Response Text:")
+# print(repr(search_response.text))
+# -----------------------------
 
 try:
     search_data = search_response.json()
@@ -40,7 +45,6 @@ except (KeyError, IndexError):
     print(f"Parsed JSON data: {json.dumps(search_data, indent=2)}")
     exit()
 
-# Get the actual loadshedding schedule for that Area ID
 schedule_url = f"https://developer.sepush.co.za/business/3.0/area?id={area_id}"
 print(f"Fetching schedule for {area_name}...")
 
