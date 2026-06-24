@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 API_KEY = os.getenv("ESKOM_API_KEY")
 
-if not API_KEY or API_KEY == "your_actual_api_key_here":
+if not API_KEY:
     print("Error: Please put your real API key in the .env file!")
     exit()
 
@@ -19,7 +19,7 @@ search_url = f"https://developer.sepush.co.za/business/3.0/areas_search?text={se
 print(f"Searching for {search_text} Area ID using v3.0 API...")
 search_response = requests.get(search_url, headers=headers)
 
-# NEW DEBUGGING SECTION
+# DEBUGGING SECTION
 print(f"Status Code: {search_response.status_code}")
 # print("Raw API Response Text:")
 # print(repr(search_response.text))
@@ -54,6 +54,11 @@ schedule_data = schedule_response.json()
 if "error" in schedule_data:
     print(f"\nAPI Error on Schedule fetch: {schedule_data['error']}")
     exit()
+
+# If loadshedding is suspended, the API drops the 'events' key.
+# We inject an empty array so DuckDB's schema reader doesn't crash.
+if "events" not in schedule_data:
+    schedule_data["events"] = []
 
 # Save the raw JSON payload to Local Data Lake
 os.makedirs("data", exist_ok=True)
