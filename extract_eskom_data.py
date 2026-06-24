@@ -56,9 +56,15 @@ if "error" in schedule_data:
     exit()
 
 # If loadshedding is suspended, the API drops the 'events' key.
-# We inject an empty array so DuckDB's schema reader doesn't crash.
+# Inject an empty array so DuckDB's schema reader doesn't crash.
 if "events" not in schedule_data:
     schedule_data["events"] = []
+
+# Force our own known dimensions into the payload so dbt always has them.
+schedule_data["_meta"] = {
+    "area_id": area_id,
+    "area_name": area_name
+}
 
 # Save the raw JSON payload to Local Data Lake
 os.makedirs("data", exist_ok=True)
