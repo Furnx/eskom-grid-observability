@@ -3,39 +3,37 @@
 ) }}
 
 WITH raw_json AS (
-    -- Directly reading the local JSON file.
-    -- The path is relative to where DuckDB is executed.
-    SELECT * FROM read_json_auto('../data/raw_tshwane_schedule.json')
+    -- read_json with explicit columns bypasses automatic inference.
+    -- This forces the 'events' column to exist as an array of structs,
+    -- even when the python script injects a completely empty array [].
+    SELECT * FROM read_json(
+        '../data/raw_tshwane_schedule.json',
+        columns = {
+            'events': 'STRUCT("start" VARCHAR, "end" VARCHAR, note VARCHAR)[]'
+        }
+    )
 ),
 
 flattened_events AS (
-    -- UNNEST flattens the array of events into individual rows.
-    -- We use a CROSS JOIN implicitly by listing the raw table and the unnested array.
-    SELECT
-        -- Extracting top-level metadata if needed (adjust based on actual JSON keys)
-        info.area_name::VARCHAR AS area_name,
+    SELECT 
+        -- Defensive casting of strings into native Timestamps
+        CAST(event."start" AS TIMESTAMP) AS start_time,
+        CAST(event."end" AS TIMESTAMP) AS end_time,
         
-        -- Flattening the nested events array
-        event.start::TIMESTAMP AS start_time,
-        event.end::TIMESTAMP AS end_time,
+        -- Extracting the integer stage from the note
+        CAST(REGEXP_EXTRACT(event.note, '\d+') AS INTEGER) AS loadshedding_stage,
         
-        -- Extracting the stage integer from the note string (e.g., "Stage 2" -> 2)
-        -- Defensive string manipulation using REGEXP_EXTRACT
-        CAST(REGEXP_EXTRACT(event.note::VARCHAR, '\d+') AS INTEGER) AS loadshedding_stage,
-        
-        event.note::VARCHAR AS raw_note
+        event.note AS raw_note
         
     FROM raw_json,
     UNNEST(events) AS t(event)
 )
 
 SELECT
-    area_name,
     start_time,
     end_time,
     loadshedding_stage,
     raw_note,
-    -- Adding an extraction timestamp for auditability
     CURRENT_TIMESTAMP AS dbt_extracted_at
 FROM flattened_events
 WHERE start_time IS NOT NULL
