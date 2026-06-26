@@ -3,12 +3,10 @@
 ) }}
 
 WITH raw_json AS (
-    -- read_json with explicit columns bypasses automatic inference.
-    -- This forces the 'events' column to exist as an array of structs,
-    -- even when the python script injects a completely empty array [].
     SELECT * FROM read_json(
         '../data/raw_tshwane_schedule.json',
         columns = {
+            '_meta': 'STRUCT(area_id VARCHAR, area_name VARCHAR)',
             'events': 'STRUCT("start" VARCHAR, "end" VARCHAR, note VARCHAR)[]'
         }
     )
@@ -16,25 +14,27 @@ WITH raw_json AS (
 
 flattened_events AS (
     SELECT 
-        -- Defensive casting of strings into native Timestamps
+        -- Pulling explicitly from our injected metadata block
+        raw_json._meta.area_id AS area_id,
+        raw_json._meta.area_name AS area_name,
+        
         CAST(event."start" AS TIMESTAMP) AS start_time,
         CAST(event."end" AS TIMESTAMP) AS end_time,
-        
-        -- Extracting the integer stage from the note
         CAST(REGEXP_EXTRACT(event.note, '\d+') AS INTEGER) AS loadshedding_stage,
-        
         event.note AS raw_note
         
     FROM raw_json,
     UNNEST(events) AS t(event)
 )
 
-SELECT
+SELECT 
+    area_id,
+    area_name,
     start_time,
     end_time,
     loadshedding_stage,
     raw_note,
     CURRENT_TIMESTAMP AS dbt_extracted_at
 FROM flattened_events
-WHERE start_time IS NOT NULL
+WHERE start_time IS NOT NULL 
   AND end_time IS NOT NULL
