@@ -1,0 +1,25 @@
+version: 2
+
+models:
+  - name: stg_eskom_tshwane_schedule
+    description: "Flattened and typed staging model for Eskom loadshedding schedules."
+    columns:
+      - name: area_id
+        description: "The unique ID for the region."
+        tests:
+          - not_null
+      - name: start_time
+        description: "The timestamp when loadshedding begins."
+        tests:
+          - not_null
+      - name: end_time
+        description: "The timestamp when loadshedding ends."
+        tests:
+          - not_null
+      - name: loadshedding_stage
+        description: "The integer extraction of the loadshedding stage."
+        tests:
+          - not_null
+          # Ensures the regex extraction didn't fail and produce a wildly high number
+          - accepted_values:
+              values: [1, 2, 3, 4, 5, 6, 7, 8]
