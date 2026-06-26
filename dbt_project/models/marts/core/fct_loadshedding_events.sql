@@ -8,7 +8,7 @@ WITH staged_data AS (
 
 calculated_facts AS (
     SELECT 
-        -- We generate a unique hash for each event to act as a primary key
+        -- generate a unique hash for each event to act as a primary key
         MD5(area_id || start_time::VARCHAR || loadshedding_stage::VARCHAR) AS event_id,
         
         area_id,

@@ -7,7 +7,7 @@ WITH staged_data AS (
 ),
 
 unique_areas AS (
-    -- DISTINCT ensures we only get one row per area
+    -- DISTINCT ensures I only get one row per area
     SELECT DISTINCT 
         area_id,
         area_name
