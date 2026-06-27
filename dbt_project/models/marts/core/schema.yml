@@ -1,0 +1,51 @@
+version: 2
+
+models:
+  - name: dim_area
+    description: "Dimension table containing unique loadshedding areas."
+    columns:
+      - name: area_id
+        description: "Primary key for the area."
+        tests:
+          - unique
+          - not_null
+      - name: area_name
+        description: "The human-readable name of the area."
+        tests:
+          - not_null
+
+  - name: fct_loadshedding_events
+    description: "Fact table recording individual loadshedding outage windows."
+    columns:
+      - name: event_id
+        description: "Primary key hashed from area, start time, and stage."
+        tests:
+          - unique
+          - not_null
+      - name: area_id
+        description: "Foreign key linking to dim_area."
+        tests:
+          - not_null
+          # Referential Integrity Check: Ensures every event maps to a valid area in the dimension table
+          - relationships:
+              to: ref('dim_area')
+              field: area_id
+      - name: start_time
+        description: "When the loadshedding stage begins."
+        tests:
+          - not_null
+      - name: end_time
+        description: "When the loadshedding stage ends."
+        tests:
+          - not_null
+      - name: loadshedding_stage
+        description: "The severity stage of the outage."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5, 6, 7, 8]
+      - name: duration_hours
+        description: "Calculated duration of the outage in hours."
+        tests:
+          - not_null
