@@ -28,7 +28,6 @@ models:
           - not_null
           # Referential Integrity Check: Ensures every event maps to a valid area in the dimension table
           - relationships:
-            arguments:
               to: ref('dim_area')
               field: area_id
       - name: start_time
