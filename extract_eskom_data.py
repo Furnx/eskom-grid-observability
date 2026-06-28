@@ -2,75 +2,86 @@ import os
 import json
 import requests
 from dotenv import load_dotenv
+from dagster import asset, AssetExecutionContext
 
 load_dotenv()
 API_KEY = os.getenv("ESKOM_API_KEY")
 
-if not API_KEY:
-    print("Error: Please put your real API key in the .env file!")
-    exit()
+@asset(
+    name="raw_eskom_tshwane_schedule",
+    description="Extracts loadshedding schedule from EskomSePush API v3.0, handles missing events, and saves to local storage.",
+    group_name="eskom_extraction",
+    compute_kind="python",
+)
+def raw_eskom_tshwane_schedule(context: AssetExecutionContext):
 
-headers = {"token": API_KEY}
+    if not API_KEY:
+        raise ValueError("Error: Please put your real API key in the .env file!")
 
-# Search for Tshwane to get its specific Area ID
-search_text = "Tshwane"
-search_url = f"https://developer.sepush.co.za/business/3.0/areas_search?text={search_text}"
+    headers = {"token": API_KEY}
 
-print(f"Searching for {search_text} Area ID using v3.0 API...")
-search_response = requests.get(search_url, headers=headers)
+    # Search for Tshwane to get its specific Area ID
+    search_text = "Tshwane"
+    search_url = f"https://developer.sepush.co.za/business/3.0/areas_search?text={search_text}"
 
-# DEBUGGING SECTION
-print(f"Status Code: {search_response.status_code}")
-# print("Raw API Response Text:")
-# print(repr(search_response.text))
-# -----------------------------
+    context.log.info(f"Searching for {search_text} Area ID using v3.0 API...")
+    search_response = requests.get(search_url, headers=headers)
 
-try:
-    search_data = search_response.json()
-except requests.exceptions.JSONDecodeError:
-    print("\nSTOPPING: The API returned something that isn't JSON. Look at the raw response text above to see what it is.")
-    exit()
+    # DEBUGGING SECTION
+    context.log.info("Raw API Response:")
+    context.log.info(search_response.text)
+    context.log.info(f"Status Code: {search_response.status_code}")
+    # print("Raw API Response Text:")
+    # print(repr(search_response.text))
+    # -----------------------------
 
-if "error" in search_data:
-    print(f"\nAPI Error: {search_data['error']}")
-    exit()
+    try:
+        search_data = search_response.json()
+    except requests.exceptions.JSONDecodeError:
+        context.log.error("\nSTOPPING: The API returned something that isn't JSON. Look at the raw response text above to see what it is.")
+        raise Exception("JSONDecodeError: on Area Search")
 
-# Grab the first matching area's ID
-try:
-    area_id = search_data['areas'][0]['id']
-    area_name = search_data['areas'][0]['name']
-    print(f"\nFound Area: {area_name} (ID: {area_id})")
-except (KeyError, IndexError):
-    print("\nSTOPPING: The structure was off. Look at the raw response above to see why!")
-    print(f"Parsed JSON data: {json.dumps(search_data, indent=2)}")
-    exit()
 
-schedule_url = f"https://developer.sepush.co.za/business/3.0/area?id={area_id}"
-print(f"Fetching schedule for {area_name}...")
+    if "error" in search_data:
+        raise Exception(f"API Error on Area Search: {search_data['error']}")
 
-schedule_response = requests.get(schedule_url, headers=headers)
-schedule_data = schedule_response.json()
+    # Grab the first matching area's ID
+    try:
+        area_id = search_data['areas'][0]['id']
+        area_name = search_data['areas'][0]['name']
+        context.log.info(f"\nFound Area: {area_name} (ID: {area_id})")
+    except (KeyError, IndexError):
+        context.log.error("\nSTOPPING: The structure was off. Look at the raw response above to see why!")
+        context.log.info(f"Parsed JSON data: {json.dumps(search_data, indent=2)}")
+        raise Exception("Structure mismatch")
 
-if "error" in schedule_data:
-    print(f"\nAPI Error on Schedule fetch: {schedule_data['error']}")
-    exit()
+    schedule_url = f"https://developer.sepush.co.za/business/3.0/area?id={area_id}"
+    context.log.info(f"Fetching schedule for {area_name}...")
 
-# If loadshedding is suspended, the API drops the 'events' key.
-# Inject an empty array so DuckDB's schema reader doesn't crash.
-if "events" not in schedule_data:
-    schedule_data["events"] = []
+    schedule_response = requests.get(schedule_url, headers=headers)
+    schedule_data = schedule_response.json()
 
-# Force our own known dimensions into the payload so dbt always has them.
-schedule_data["_meta"] = {
-    "area_id": area_id,
-    "area_name": area_name
-}
+    if "error" in schedule_data:
+        context.log.error(f"\nAPI Error on Schedule fetch: {schedule_data['error']}")
+        raise Exception(f"API Error on Schedule fetch: {schedule_data['error']}")
 
-# Save the raw JSON payload to Local Data Lake
-os.makedirs("data", exist_ok=True)
-file_path = "data/raw_tshwane_schedule.json"
+    # If loadshedding is suspended, the API drops the 'events' key.
+    # Inject an empty array so DuckDB's schema reader doesn't crash.
+    if "events" not in schedule_data:
+        context.log.info("No events found in the schedule. Injecting an empty 'events' array to maintain schema consistency.")
+        schedule_data["events"] = []
 
-with open(file_path, "w") as f:
-    json.dump(schedule_data, f, indent=4)
+    # Force our own known dimensions into the payload so dbt always has them.
+    schedule_data["_meta"] = {
+        "area_id": area_id,
+        "area_name": area_name
+    }
 
-print(f"Success! Raw schedule saved to {file_path}")
+    # Save the raw JSON payload to Local Data Lake
+    os.makedirs("data", exist_ok=True)
+    file_path = "data/raw_tshwane_schedule.json"
+
+    with open(file_path, "w") as f:
+        json.dump(schedule_data, f, indent=4)
+
+    context.log.info(f"Success! Raw schedule saved to {file_path}")
