@@ -1,5 +1,5 @@
 {{ config(
-    materialized='table'
+    materialized='view'
 ) }}
 
 WITH raw_payload AS (
@@ -8,16 +8,16 @@ WITH raw_payload AS (
 
 flattened_events AS (
     SELECT 
-        -- Pulling explicitly from injected metadata block
-        raw_json._meta.area_id AS area_id,
-        raw_json._meta.area_name AS area_name,
+        -- Pulling explicitly from the renamed CTE
+        raw_payload._meta.area_id AS area_id,
+        raw_payload._meta.area_name AS area_name,
         
         CAST(event."start" AS TIMESTAMP) AS start_time,
         CAST(event."end" AS TIMESTAMP) AS end_time,
         CAST(REGEXP_EXTRACT(event.note, '\d+') AS INTEGER) AS loadshedding_stage,
         event.note AS raw_note
         
-    FROM raw_json,
+    FROM raw_payload,
     UNNEST(events) AS t(event)
 )
 
