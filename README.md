@@ -17,9 +17,9 @@ The system is built on a "Modern Data Stack in a Box" architecture, heavily emph
 ```mermaid
 graph TD
     %% Define Styles
-    classDef api fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef api fill:#f9f,stroke:#333,stroke-width:2px,color:#000;
     classDef python fill:#4B8BBE,stroke:#FFE873,stroke-width:2px,color:#fff;
-    classDef duckdb fill:#FFF000,stroke:#333,stroke-width:2px;
+    classDef duckdb fill:#FFF000,stroke:#333,stroke-width:2px,color:#000;
     classDef dbt fill:#FF694B,stroke:#333,stroke-width:2px,color:#fff;
     classDef dagster fill:#7b61ff,stroke:#333,stroke-width:2px,color:#fff;
 
