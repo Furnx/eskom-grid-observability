@@ -11,7 +11,7 @@ WITH raw_payload AS (
             'events': 'STRUCT("start" VARCHAR, "end" VARCHAR, note VARCHAR)[]'
         }
     )
-)
+),
 
 flattened_events AS (
     SELECT 
