@@ -8,12 +8,4 @@ sources:
         meta:
           dagster:
             asset_key: ["raw_eskom_tshwane_schedule"]
-          # Inject explicit read_json schema directly into the orchestrator contract
-          external_location: >
-            read_json(
-                '../data/raw_tshwane_schedule.json',
-                columns = {
-                    '_meta': 'STRUCT(area_id VARCHAR, area_name VARCHAR)',
-                    'events': 'STRUCT("start" VARCHAR, "end" VARCHAR, note VARCHAR)[]'
-                }
-            )
+          external_location: "'../data/raw_tshwane_schedule.json'"
