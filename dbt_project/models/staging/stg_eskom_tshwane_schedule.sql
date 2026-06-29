@@ -3,8 +3,15 @@
 ) }}
 
 WITH raw_payload AS (
-    SELECT * FROM {{ source('eskom_data', 'raw_eskom_tshwane_schedule') }}
-),
+    -- Wrap the strict schema enforcement AROUND the dbt source macro
+    SELECT * FROM read_json(
+        {{ source('eskom_data', 'raw_eskom_tshwane_schedule') }},
+        columns = {
+            '_meta': 'STRUCT(area_id VARCHAR, area_name VARCHAR)',
+            'events': 'STRUCT("start" VARCHAR, "end" VARCHAR, note VARCHAR)[]'
+        }
+    )
+)
 
 flattened_events AS (
     SELECT 
