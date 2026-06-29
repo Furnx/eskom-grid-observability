@@ -1,10 +1,17 @@
 version: 2
 
 sources:
-  - name: eskom_data # This is just a logical grouping name
+  - name: eskom_data
     tables:
       - name: raw_eskom_tshwane_schedule
         description: "The raw JSON payload extracted from the EskomSePush API v3.0."
         meta:
-          # This tells DuckDB exactly where to find the physical file for the Python script dropped
-          external_location: "'../data/raw_tshwane_schedule.json'"
+          # Inject explicit read_json schema directly into the orchestrator contract
+          external_location: >
+            read_json(
+                '../data/raw_tshwane_schedule.json',
+                columns = {
+                    '_meta': 'STRUCT(area_id VARCHAR, area_name VARCHAR)',
+                    'events': 'STRUCT("start" VARCHAR, "end" VARCHAR, note VARCHAR)[]'
+                }
+            )
