@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: eskom_data # This is just a logical grouping name
+    tables:
+      - name: raw_eskom_tshwane_schedule
+        description: "The raw JSON payload extracted from the EskomSePush API v3.0."
+        meta:
+          # This tells DuckDB exactly where to find the physical file for the Python script dropped
+          external_location: "'../data/raw_tshwane_schedule.json'"
