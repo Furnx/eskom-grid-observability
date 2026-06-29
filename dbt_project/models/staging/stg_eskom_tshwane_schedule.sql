@@ -2,14 +2,8 @@
     materialized='table'
 ) }}
 
-WITH raw_json AS (
-    SELECT * FROM read_json(
-        '../data/raw_tshwane_schedule.json',
-        columns = {
-            '_meta': 'STRUCT(area_id VARCHAR, area_name VARCHAR)',
-            'events': 'STRUCT("start" VARCHAR, "end" VARCHAR, note VARCHAR)[]'
-        }
-    )
+WITH raw_payload AS (
+    SELECT * FROM {{ source('eskom_data', 'raw_eskom_tshwane_schedule') }}
 ),
 
 flattened_events AS (
