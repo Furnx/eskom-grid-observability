@@ -6,6 +6,8 @@ sources:
       - name: raw_eskom_tshwane_schedule
         description: "The raw JSON payload extracted from the EskomSePush API v3.0."
         meta:
+          dagster:
+            asset_key: ["raw_eskom_tshwane_schedule"]
           # Inject explicit read_json schema directly into the orchestrator contract
           external_location: >
             read_json(
