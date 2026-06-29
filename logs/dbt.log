@@ -28,3 +28,18 @@ Happy modeling!
 [0m21:43:41.587004 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000234FC293490>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000234FC38FD10>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000234FC3F47C0>]}
 [0m21:43:41.587330 [debug] [MainThread]: Flushing usage events
 [0m21:43:50.784394 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m11:34:37.567176 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000189A03597F0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000189A275BED0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000189A275B9D0>]}
+
+
+============================== 11:34:37.602488 | f8cddd4a-ef15-43f1-91c3-9067ef48ee77 ==============================
+[0m11:34:37.602488 [info ] [MainThread]: Running with dbt=1.11.11
+[0m11:34:37.603065 [debug] [MainThread]: running dbt with arguments {'static_parser': 'True', 'no_print': 'None', 'version_check': 'True', 'target_path': 'None', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'printer_width': '80', 'write_json': 'True', 'introspect': 'True', 'log_cache_events': 'False', 'empty': 'None', 'cache_selected_only': 'False', 'fail_fast': 'False', 'debug': 'False', 'log_format': 'default', 'partial_parse': 'True', 'send_anonymous_usage_stats': 'True', 'quiet': 'False', 'warn_error': 'None', 'profiles_dir': 'C:\\Users\\nkosi\\.dbt', 'use_colors': 'True', 'indirect_selection': 'eager', 'invocation_command': 'dbt parse', 'use_experimental_parser': 'False', 'log_path': 'logs'}
+[0m11:34:37.603557 [error] [MainThread]: Encountered an error:
+Runtime Error
+  No dbt_project.yml found at expected path C:\Users\nkosi\OneDrive\Desktop\WF\Projetcs\eskom-grid-observability\dbt_project.yml
+  Verify that each entry within packages.yml (and their transitive dependencies) contains a file named dbt_project.yml
+  
+[0m11:34:37.604307 [debug] [MainThread]: Command `dbt parse` failed at 11:34:37.604206 after 0.23 seconds
+[0m11:34:37.604600 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000189A25DAC40>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000189A25DD010>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000189A27F0490>]}
+[0m11:34:37.604893 [debug] [MainThread]: Flushing usage events
+[0m11:34:39.051451 [debug] [MainThread]: An error was encountered while trying to flush usage events
