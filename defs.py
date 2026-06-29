@@ -13,7 +13,6 @@ dbt_resource = DbtCliResource(project_dir=os.fspath(dbt_project_dir))
 # 3. Load the dbt models and link them to the Python extraction
 @dbt_assets(
     manifest=dbt_project_dir.joinpath("target", "manifest.json"),
-    deps=[extract_eskom_data.raw_eskom_tshwane_schedule]
 )
 def eskom_dbt_assets(context, dbt: DbtCliResource):
     # This executes `dbt build` (running models and tests together)
