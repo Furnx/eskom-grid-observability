@@ -1,5 +1,11 @@
 version: 2
 
+# DECLARE THE GROUP HERE INSTEAD
+groups:
+  - name: eskom_transformations
+    owner:
+      name: data_engineering
+
 models:
   - name: dim_area
     description: "Dimension table containing unique loadshedding areas."
@@ -28,8 +34,9 @@ models:
           - not_null
           # Referential Integrity Check: Ensures every event maps to a valid area in the dimension table
           - relationships:
-              to: ref('dim_area')
-              field: area_id
+              arguments:
+                to: ref('dim_area')
+                field: area_id
       - name: start_time
         description: "When the loadshedding stage begins."
         tests:
