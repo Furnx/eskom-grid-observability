@@ -7,7 +7,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # Mount your local folder into the container so DuckDB data persists on your machine
+      # Mount local folder into the container so DuckDB data persists on machine
       - .:/app
     environment:
       - DAGSTER_HOME=/opt/dagster/dagster_home
