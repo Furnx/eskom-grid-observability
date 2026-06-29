@@ -46,7 +46,7 @@ eskom_4hr_schedule = ScheduleDefinition(
     cron_schedule="0 */4 * * *",
 )
 
-# Add the schedule to your Definitions
+# Add the schedule to Definitions
 defs = Definitions(
     assets=[raw_eskom_tshwane_schedule, eskom_dbt_assets],
     schedules=[eskom_4hr_schedule], # <-- Injected native schedule
