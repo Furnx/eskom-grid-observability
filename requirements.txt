@@ -1,0 +1,12 @@
+# Orchestration
+dagster
+dagster-webserver
+
+# Transformation & Integration
+dbt-core>=1.11.0
+dbt-duckdb
+dagster-dbt
+
+# Database & Extraction
+duckdb
+requests
