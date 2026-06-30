@@ -13,7 +13,32 @@ API_KEY = os.getenv("ESKOM_API_KEY")
     group_name="eskom_extraction",
     compute_kind="python",
 )
-def raw_eskom_tshwane_schedule(context: AssetExecutionContext):
+def raw_eskom_tshwane_schedule(context: AssetExecutionContext) -> None:
+
+    """
+    Extracts the live loadshedding and load reduction schedule for Tshwane from the EskomSePush API v3.0.
+
+    This function acts as the ingestion data contract. It intercepts the raw JSON payload
+    and normalizes the schema to prevent downstream database compilation errors during
+    suspended outage states.
+
+    Data Contract Enforcements:
+        - Injects an empty list (`[]`) into the `events` key if the API omits it to
+        bypass DuckDB schema inference crashes.
+        - Appends a `_meta` dictionary containing `area_id` and `area_name` to decouple
+        dimensional logic from volatile API payload structures.
+
+    Args:
+        context (AssetExecutionContext): The Dagster execution context used for
+            asset-level logging and metadata tracking.
+
+    Raises:
+        requests.exceptions.HTTPError: If the API returns a 4xx or 5xx status code.
+        requests.exceptions.JSONDecodeError: If the API gateway fails and returns raw HTML
+            instead of a valid JSON payload.
+        KeyError: If the expected hierarchical structure of the API response fundamentally changes.
+
+    """
 
     if not API_KEY:
         raise ValueError("Error: Please put your real API key in the .env file!")
