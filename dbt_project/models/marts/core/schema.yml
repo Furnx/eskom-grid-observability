@@ -8,28 +8,36 @@ groups:
 
 models:
   - name: dim_area
-    description: "Dimension table containing unique loadshedding areas."
+    description: >
+      The Kimball dimensional table containing a unique roster of regions monitored by the EskomSePush API. 
+      This isolates static descriptive nouns (areas) from transactional outage facts to optimize downstream 
+      query performance and reduce data bloat.
     columns:
       - name: area_id
-        description: "Primary key for the area."
+        description: "The primary key identifier for the region, mapped directly from the upstream API payload."
         tests:
           - unique
           - not_null
       - name: area_name
-        description: "The human-readable name of the area."
+        description: "The human-readable string representation of the region (e.g., 'Tshwane')."
         tests:
           - not_null
 
   - name: fct_loadshedding_events
-    description: "Fact table recording individual loadshedding outage windows."
+    description: >
+      The transactional Kimball fact table representing discrete grid outage events (both loadshedding and load reduction). 
+      This table isolates complex business logic from the staging layer and enforces mathematical idempotency for local batch reruns.
     columns:
       - name: event_id
-        description: "Primary key hashed from area, start time, and stage."
+        description: >
+          **Primary Key.** A deterministic surrogate key generated using an MD5 hash of the concatenated 
+          `area_id`, `start_time`, and `loadshedding_stage`. This guarantees that consecutive pipeline 
+          executions mathematically overwrite or ignore duplicate records, maintaining absolute idempotency.
         tests:
           - unique
           - not_null
       - name: area_id
-        description: "Foreign key linking to dim_area."
+        description: "Foreign key linking the outage event to the static descriptive data in `dim_area`."
         tests:
           - not_null
           # Referential Integrity Check: Ensures every event maps to a valid area in the dimension table
@@ -38,21 +46,25 @@ models:
                 to: ref('dim_area')
                 field: area_id
       - name: start_time
-        description: "When the loadshedding stage begins."
+        description: "The strictly cast timestamp indicating the exact beginning of the scheduled grid outage."
         tests:
           - not_null
       - name: end_time
-        description: "When the loadshedding stage ends."
+        description: "The strictly cast timestamp indicating the exact conclusion of the scheduled grid outage."
         tests:
           - not_null
       - name: loadshedding_stage
-        description: "The severity stage of the outage."
+        description: >
+          The numeric severity stage of the outage, surgically extracted from raw string notes via Regex 
+          during the staging phase. Bounded to accepted values 1 through 8.
         tests:
           - not_null
           - accepted_values:
               arguments:
                 values: [1, 2, 3, 4, 5, 6, 7, 8]
       - name: duration_hours
-        description: "Calculated duration of the outage in hours."
+        description: >
+          The total duration of the outage event, calculated natively within the marts layer using DuckDB's 
+          `DATE_DIFF` function to provide immediate analytical value to downstream BI dashboards.
         tests:
           - not_null
