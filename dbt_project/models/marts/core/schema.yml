@@ -9,8 +9,8 @@ groups:
 models:
   - name: dim_area
     description: >
-      The Kimball dimensional table containing a unique roster of regions monitored by the EskomSePush API. 
-      This isolates static descriptive nouns (areas) from transactional outage facts to optimize downstream 
+      The Kimball dimensional table containing a unique roster of regions monitored by the EskomSePush API.
+      This isolates static descriptive nouns (areas) from transactional outage facts to optimize downstream
       query performance and reduce data bloat.
     columns:
       - name: area_id
@@ -25,13 +25,13 @@ models:
 
   - name: fct_loadshedding_events
     description: >
-      The transactional Kimball fact table representing discrete grid outage events (both loadshedding and load reduction). 
+      The transactional Kimball fact table representing discrete grid outage events (both loadshedding and load reduction).
       This table isolates complex business logic from the staging layer and enforces mathematical idempotency for local batch reruns.
     columns:
       - name: event_id
         description: >
-          **Primary Key.** A deterministic surrogate key generated using an MD5 hash of the concatenated 
-          `area_id`, `start_time`, and `loadshedding_stage`. This guarantees that consecutive pipeline 
+          **Primary Key.** A deterministic surrogate key generated using an MD5 hash of the concatenated
+          `area_id`, `start_time`, and `loadshedding_stage`. This guarantees that consecutive pipeline
           executions mathematically overwrite or ignore duplicate records, maintaining absolute idempotency.
         tests:
           - unique
@@ -55,7 +55,7 @@ models:
           - not_null
       - name: loadshedding_stage
         description: >
-          The numeric severity stage of the outage, surgically extracted from raw string notes via Regex 
+          The numeric severity stage of the outage, surgically extracted from raw string notes via Regex
           during the staging phase. Bounded to accepted values 1 through 8.
         tests:
           - not_null
@@ -64,7 +64,7 @@ models:
                 values: [1, 2, 3, 4, 5, 6, 7, 8]
       - name: duration_hours
         description: >
-          The total duration of the outage event, calculated natively within the marts layer using DuckDB's 
+          The total duration of the outage event, calculated natively within the marts layer using DuckDB's
           `DATE_DIFF` function to provide immediate analytical value to downstream BI dashboards.
         tests:
           - not_null
