@@ -90,7 +90,6 @@ Because the local environment is completely containerized, scaling horizontally 
 git clone [text](https://github.com/Furnx/eskom-grid-observability)
 cd eskom-grid-observability
 2. **Install Dependencies:**pip install -r requirements.txt
-
 ```
 
 2. **Configure Environment Variables:**
