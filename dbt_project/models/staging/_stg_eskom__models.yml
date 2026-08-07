@@ -1,25 +1,67 @@
 version: 2
 
 models:
-  - name: stg_eskom_tshwane_schedule
-    description: "Flattened and typed staging model for Eskom loadshedding schedules."
+  - name: stg_eskom_grid_schedule
+    description: >
+      Flattened, typed, and classified staging model for the multi-area
+      EskomSePush API v3.0 grid event payloads. Reads all area JSON files
+      via DuckDB glob union and enforces strict STRUCT schema to survive
+      upstream API schema drift.
     columns:
       - name: area_id
-        description: "The unique ID for the region."
+        description: "Pre-resolved EskomSePush API area identifier from areas_config.yml."
         tests:
           - not_null
+
+      - name: area_name
+        description: "Human-readable area name (e.g. 'Johannesburg')."
+        tests:
+          - not_null
+
+      - name: municipality
+        description: "Municipal entity responsible for the area's distribution network."
+        tests:
+          - not_null
+
+      - name: province
+        description: "South African province the area falls within."
+        tests:
+          - not_null
+
       - name: start_time
-        description: "The timestamp when loadshedding begins."
+        description: "Timestamp when the scheduled grid event begins."
         tests:
           - not_null
+
       - name: end_time
-        description: "The timestamp when loadshedding ends."
+        description: "Timestamp when the scheduled grid event ends."
         tests:
           - not_null
-      - name: loadshedding_stage
-        description: "The integer extraction of the loadshedding stage."
+
+      - name: event_classification
+        description: >
+          Canonical event type derived from the raw note string via CASE pattern
+          matching. Values: Loadshedding, Load Reduction, Load Limiting,
+          Water Shedding, Unclassified.
         tests:
           - not_null
           - accepted_values:
               arguments:
-                values: [1, 2, 3, 4, 5, 6, 7, 8]
+                values:
+                  - "Loadshedding"
+                  - "Load Reduction"
+                  - "Load Limiting"
+                  - "Water Shedding"
+                  - "Unclassified"
+
+      - name: event_stage
+        description: >
+          Integer stage number (1–8) extracted from the raw note via regex.
+          NULL is valid and expected for Load Reduction and other non-staged
+          event types. No not_null test applied here.
+
+      - name: raw_note
+        description: "The original unmodified note string from the API payload."
+
+      - name: dbt_extracted_at
+        description: "Timestamp of the dbt run that materialized this view."

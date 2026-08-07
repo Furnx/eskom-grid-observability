@@ -1,0 +1,6 @@
+event_classification,severity_weight,requires_generator,impacts_water_pressure,insurance_exclusion_eligible
+Loadshedding,1.0,true,false,true
+Load Reduction,0.8,true,false,false
+Load Limiting,0.3,false,false,false
+Water Shedding,0.9,false,true,false
+Unclassified,0.0,false,false,false

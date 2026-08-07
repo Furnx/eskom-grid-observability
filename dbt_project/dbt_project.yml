@@ -2,11 +2,11 @@
 # Name your project! Project names should contain only lowercase characters
 # and underscores. A good package name should reflect your organization's
 # name or the intended use of these models
-name: 'dbt_project'
+name: 'eskom_grid_observability'
 version: '1.0.0'
 
 # This setting configures which "profile" dbt uses for this project.
-profile: 'dbt_project'
+profile: 'eskom_grid_observability'
 
 model-paths: ["models"]
 analysis-paths: ["analyses"]
@@ -21,12 +21,30 @@ clean-targets:         # directories to be removed by `dbt clean`
 
 # Configuring models
 models:
-  dbt_project:
+  eskom_grid_observability:
     # This applies the group to ALL models in this project
     +group: eskom_transformations
-    
+
     staging:
       +materialized: view
-      
+
     marts:
       +materialized: table
+
+seeds:
+  eskom_grid_observability:
+    +schema: seeds
+    areas_config:
+      +column_types:
+        area_id: varchar
+        region_type: varchar
+        latitude: double
+        longitude: double
+        climate_zone: varchar
+    event_classifications:
+      +column_types:
+        event_classification: varchar
+        severity_weight: double
+        requires_generator: boolean
+        impacts_water_pressure: boolean
+        insurance_exclusion_eligible: boolean

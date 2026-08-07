@@ -3,9 +3,12 @@ version: 2
 sources:
   - name: eskom_data
     tables:
-      - name: raw_eskom_tshwane_schedule
-        description: "The raw JSON payload extracted from the EskomSePush API v3.0."
+      - name: raw_eskom_grid_schedules
+        description: >
+          Raw JSON payloads extracted from the EskomSePush API v3.0.
+          One file per monitored area, written to data/raw/{area_id}.json.
+          DuckDB's read_json glob union is used to load all files in a single scan.
         meta:
           dagster:
-            asset_key: ["raw_eskom_tshwane_schedule"]
-          external_location: "'../data/raw_tshwane_schedule.json'"
+            asset_key: ["raw_eskom_grid_schedules"]
+          external_location: "'../data/raw/*.json'"

@@ -1,0 +1,30 @@
+# =============================================================================
+# Eskom Grid Observability — Monitored Area Portfolio
+# =============================================================================
+#
+# Each entry defines a geographic area to monitor. The `area_id` is the
+# pre-resolved EskomSePush API identifier — storing it here eliminates one
+# API search call per run, preserving the free-tier daily quota.
+#
+# To add a new area:
+#   1. Run: python scripts/lookup_area_ids.py "<search term>"
+#   2. Copy the desired area_id from the results
+#   3. Add a new block below
+#
+# Budget note (Free Tier = 50 req/day):
+#   Each area = 1 API call per pipeline run.
+#   At hourly intervals (24 runs/day), 2 areas = 48 calls/day (leaves 2 buffer).
+#   Maximum safe areas at hourly cadence = 2.
+#   To add a 3rd area, either upgrade to Business tier or reduce to every 8 hours.
+# =============================================================================
+
+areas:
+  - area_id: "za_gt_jhb_johannesburg_9hfs"
+    area_name: "Johannesburg"
+    municipality: "City of Johannesburg"
+    province: "Gauteng"
+
+  - area_id: "za_wc_cpt_capetowncbd_utix"
+    area_name: "Cape Town CBD"
+    municipality: "City of Cape Town"
+    province: "Western Cape"

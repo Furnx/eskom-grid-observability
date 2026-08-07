@@ -1,4 +1,4 @@
-dbt_project:
+eskom_grid_observability:
   target: dev
   outputs:
     dev:

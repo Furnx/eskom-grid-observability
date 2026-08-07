@@ -1,112 +1,170 @@
 import os
 import json
+import yaml
 import requests
+from pathlib import Path
 from dotenv import load_dotenv
-from dagster import asset, AssetExecutionContext
+from dagster import asset, AssetExecutionContext, Output, MetadataValue
 
 load_dotenv()
 API_KEY = os.getenv("ESKOM_API_KEY")
 
+# ---------------------------------------------------------------------------
+# Load monitored area portfolio from areas_config.yml
+# ---------------------------------------------------------------------------
+_CONFIG_PATH = Path(__file__).parent / "areas_config.yml"
+
+def _load_area_config() -> list[dict]:
+    """Reads the area portfolio from areas_config.yml at the project root."""
+    with open(_CONFIG_PATH, "r") as f:
+        config = yaml.safe_load(f)
+    return config["areas"]
+
+
+# ---------------------------------------------------------------------------
+# Dagster Asset
+# ---------------------------------------------------------------------------
 @asset(
-    name="raw_eskom_tshwane_schedule",
-    description="Extracts loadshedding schedule from EskomSePush API v3.0, handles missing events, and saves to local storage.",
+    name="raw_eskom_grid_schedules",
+    description=(
+        "Extracts grid event schedules from the EskomSePush API v3.0 for all "
+        "areas defined in areas_config.yml. Enforces a strict data contract to "
+        "survive API schema drift and writes one JSON file per area to data/raw/."
+    ),
     group_name="eskom_extraction",
     compute_kind="python",
 )
-def raw_eskom_tshwane_schedule(context: AssetExecutionContext) -> None:
-
+def raw_eskom_grid_schedules(context: AssetExecutionContext) -> Output[None]:
     """
-    Extracts the live loadshedding and load reduction schedule for Tshwane from the EskomSePush API v3.0.
+    Multi-area ELT extraction worker.
 
-    This function acts as the ingestion data contract. It intercepts the raw JSON payload
-    and normalizes the schema to prevent downstream database compilation errors during
-    suspended outage states.
+    Iterates over the area portfolio defined in areas_config.yml, fetches the
+    live grid event schedule for each area from the EskomSePush API v3.0, and
+    writes a schema-normalized JSON file to data/raw/{area_id}.json.
 
     Data Contract Enforcements:
-        - Injects an empty list (`[]`) into the `events` key if the API omits it to
-        bypass DuckDB schema inference crashes.
-        - Appends a `_meta` dictionary containing `area_id` and `area_name` to decouple
-        dimensional logic from volatile API payload structures.
+        - Reads pre-resolved area_ids from areas_config.yml, eliminating the
+          /areas_search API call and halving per-run API consumption.
+        - Injects an empty list ([]) into the `events` key if the API omits it
+          (occurs when no events are scheduled), preventing DuckDB schema crashes.
+        - Injects a `_meta` block containing area_id, area_name, municipality,
+          and province, decoupling dimensional context from volatile API payloads.
+
+    API Budget (Free Tier = 50 req/day):
+        1 request per area per run. At hourly cadence (24 runs/day) with 2 areas
+        = 48 calls/day.
 
     Args:
-        context (AssetExecutionContext): The Dagster execution context used for
-            asset-level logging and metadata tracking.
+        context (AssetExecutionContext): Dagster execution context for logging
+            and metadata emission.
+
+    Returns:
+        Output[None]: Emits Dagster metadata summarising the run (areas processed,
+            total events found, zero-event areas).
 
     Raises:
-        requests.exceptions.HTTPError: If the API returns a 4xx or 5xx status code.
-        requests.exceptions.JSONDecodeError: If the API gateway fails and returns raw HTML
-            instead of a valid JSON payload.
-        KeyError: If the expected hierarchical structure of the API response fundamentally changes.
-
+        ValueError: If ESKOM_API_KEY is not set in the environment.
+        Exception: On HTTP 429 (rate limit exceeded) or unexpected API errors.
     """
 
     if not API_KEY:
-        raise ValueError("Error: Please put your real API key in the .env file!")
+        raise ValueError(
+            "ESKOM_API_KEY is not set. Add it to the .env file at the project root."
+        )
+
+    areas = _load_area_config()
+    context.log.info(f"Loaded {len(areas)} area(s) from areas_config.yml.")
+
+    # Ensure output directory exists
+    output_dir = Path("data/raw")
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     headers = {"token": API_KEY}
+    total_events = 0
+    zero_event_areas = []
 
-    # Search for Tshwane to get its specific Area ID
-    search_text = "Tshwane"
-    search_url = f"https://developer.sepush.co.za/business/3.0/areas_search?text={search_text}"
+    for area in areas:
+        area_id   = area["area_id"]
+        area_name = area["area_name"]
+        municipality = area["municipality"]
+        province     = area["province"]
 
-    context.log.info(f"Searching for {search_text} Area ID using v3.0 API...")
-    search_response = requests.get(search_url, headers=headers)
+        context.log.info(f"Fetching schedule for '{area_name}' ({area_id}) ...")
 
-    # DEBUGGING SECTION
-    context.log.info("Raw API Response:")
-    context.log.info(search_response.text)
-    context.log.info(f"Status Code: {search_response.status_code}")
-    # print("Raw API Response Text:")
-    # print(repr(search_response.text))
-    # -----------------------------
+        schedule_url = f"https://developer.sepush.co.za/business/3.0/area?id={area_id}"
+        response = requests.get(schedule_url, headers=headers)
 
-    try:
-        search_data = search_response.json()
-    except requests.exceptions.JSONDecodeError:
-        context.log.error("\nSTOPPING: The API returned something that isn't JSON. Look at the raw response text above to see what it is.")
-        raise Exception("JSONDecodeError: on Area Search")
+        # ── Rate limit guard ────────────────────────────────────────────────
+        if response.status_code == 429:
+            context.log.error(
+                "HTTP 429 — API daily quota exceeded. "
+                "The pipeline will halt to avoid wasting future calls. "
+                "Remaining areas will not be fetched this run."
+            )
+            raise Exception("API rate limit exceeded (HTTP 429). Check quota tomorrow.")
 
+        response.raise_for_status()
 
-    if "error" in search_data:
-        raise Exception(f"API Error on Area Search: {search_data['error']}")
+        # ── JSON decode guard ────────────────────────────────────────────────
+        try:
+            payload = response.json()
+        except requests.exceptions.JSONDecodeError:
+            context.log.error(
+                f"API returned non-JSON content for '{area_name}'. "
+                f"Raw response: {response.text[:200]}"
+            )
+            raise Exception(f"JSONDecodeError fetching schedule for {area_name}")
 
-    # Grab the first matching area's ID
-    try:
-        area_id = search_data['areas'][0]['id']
-        area_name = search_data['areas'][0]['name']
-        context.log.info(f"\nFound Area: {area_name} (ID: {area_id})")
-    except (KeyError, IndexError):
-        context.log.error("\nSTOPPING: The structure was off. Look at the raw response above to see why!")
-        context.log.info(f"Parsed JSON data: {json.dumps(search_data, indent=2)}")
-        raise Exception("Structure mismatch")
+        if "error" in payload:
+            raise Exception(f"API error for '{area_name}': {payload['error']}")
 
-    schedule_url = f"https://developer.sepush.co.za/business/3.0/area?id={area_id}"
-    context.log.info(f"Fetching schedule for {area_name}...")
+        # ── Data Contract: inject empty events array if absent ───────────────
+        # When no events are scheduled the API omits the key entirely.
+        # An empty list allows DuckDB UNNEST to safely yield zero rows.
+        if "events" not in payload:
+            context.log.info(
+                f"No 'events' key in response for '{area_name}'. "
+                "Injecting empty array to maintain schema stability."
+            )
+            payload["events"] = []
+            zero_event_areas.append(area_name)
 
-    schedule_response = requests.get(schedule_url, headers=headers)
-    schedule_data = schedule_response.json()
+        event_count = len(payload["events"])
+        total_events += event_count
+        context.log.info(f"  → {event_count} event(s) found for '{area_name}'.")
 
-    if "error" in schedule_data:
-        context.log.error(f"\nAPI Error on Schedule fetch: {schedule_data['error']}")
-        raise Exception(f"API Error on Schedule fetch: {schedule_data['error']}")
+        # ── Data Contract: inject dimensional metadata ────────────────────────
+        # Decouples geography context from the volatile API payload structure.
+        payload["_meta"] = {
+            "area_id":      area_id,
+            "area_name":    area_name,
+            "municipality": municipality,
+            "province":     province,
+        }
 
-    # If loadshedding is suspended, the API drops the 'events' key.
-    # Inject an empty array so DuckDB's schema reader doesn't crash.
-    if "events" not in schedule_data:
-        context.log.info("No events found in the schedule. Injecting an empty 'events' array to maintain schema consistency.")
-        schedule_data["events"] = []
+        # ── Write to local data lake ─────────────────────────────────────────
+        file_path = output_dir / f"{area_id}.json"
+        with open(file_path, "w") as f:
+            json.dump(payload, f, indent=4)
 
-    # Force our own known dimensions into the payload so dbt always has them.
-    schedule_data["_meta"] = {
-        "area_id": area_id,
-        "area_name": area_name
-    }
+        context.log.info(f"  → Saved to {file_path}")
 
-    # Save the raw JSON payload to Local Data Lake
-    os.makedirs("data", exist_ok=True)
-    file_path = "data/raw_tshwane_schedule.json"
+    context.log.info(
+        f"Extraction complete. {len(areas)} area(s) processed, "
+        f"{total_events} total event(s) found."
+    )
+    if zero_event_areas:
+        context.log.info(
+            f"Zero-event areas (grid was up): {zero_event_areas}"
+        )
 
-    with open(file_path, "w") as f:
-        json.dump(schedule_data, f, indent=4)
-
-    context.log.info(f"Success! Raw schedule saved to {file_path}")
+    return Output(
+        value=None,
+        metadata={
+            "areas_processed":   MetadataValue.int(len(areas)),
+            "total_events_found": MetadataValue.int(total_events),
+            "zero_event_areas":  MetadataValue.text(
+                ", ".join(zero_event_areas) if zero_event_areas else "none"
+            ),
+        },
+    )

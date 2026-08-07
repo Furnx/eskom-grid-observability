@@ -10,3 +10,7 @@ dagster-dbt
 # Database & Extraction
 duckdb
 requests
+
+# Utilities
+pyyaml
+python-dotenv

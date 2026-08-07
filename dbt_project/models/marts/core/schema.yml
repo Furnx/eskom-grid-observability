@@ -1,70 +1,175 @@
 version: 2
 
-# DECLARE THE GROUP HERE INSTEAD
 groups:
   - name: eskom_transformations
     owner:
       name: data_engineering
 
 models:
+
+  # ── dim_area ────────────────────────────────────────────────────────────────
   - name: dim_area
     description: >
-      The Kimball dimensional table containing a unique roster of regions monitored by the EskomSePush API.
-      This isolates static descriptive nouns (areas) from transactional outage facts to optimize downstream
-      query performance and reduce data bloat.
+      Kimball dimension table containing a unique roster of geographic areas
+      monitored by the pipeline. Each area maps to a specific EskomSePush
+      API identifier and carries municipality and province context sourced
+      from areas_config.yml via the extraction worker's _meta injection.
+      Designed for cross-domain joins to corporate ERP facility dimensions
+      in ESG and virtual wheeling use cases.
     columns:
       - name: area_id
-        description: "The primary key identifier for the region, mapped directly from the upstream API payload."
+        description: "Primary key. Pre-resolved EskomSePush API area identifier."
         tests:
           - unique
           - not_null
+
       - name: area_name
-        description: "The human-readable string representation of the region (e.g., 'Tshwane')."
+        description: "Human-readable area name (e.g. 'Johannesburg')."
         tests:
           - not_null
 
-  - name: fct_loadshedding_events
-    description: >
-      The transactional Kimball fact table representing discrete grid outage events (both loadshedding and load reduction).
-      This table isolates complex business logic from the staging layer and enforces mathematical idempotency for local batch reruns.
-    columns:
-      - name: event_id
+      - name: municipality
         description: >
-          **Primary Key.** A deterministic surrogate key generated using an MD5 hash of the concatenated
-          `area_id`, `start_time`, and `loadshedding_stage`. This guarantees that consecutive pipeline
-          executions mathematically overwrite or ignore duplicate records, maintaining absolute idempotency.
+          Municipal entity responsible for electricity distribution in this area
+          (e.g. 'City of Johannesburg'). Used for joining to municipal asset
+          registers and corporate ERP geography hierarchies.
+        tests:
+          - not_null
+
+      - name: province
+        description: "South African province (e.g. 'Gauteng', 'Western Cape')."
+        tests:
+          - not_null
+      
+      - name: region_type
+        description: "Metropolitan, District, etc."
+      
+      - name: latitude
+        description: "Latitude coordinate"
+        
+      - name: longitude
+        description: "Longitude coordinate"
+        
+      - name: climate_zone
+        description: "Climatic region for environmental correlation"
+
+  # ── dim_event_type ─────────────────────────────────────────────────────────
+  - name: dim_event_type
+    description: >
+      Kimball dimension table containing event classifications and their operational impacts.
+    columns:
+      - name: event_classification
+        description: "Primary key. Event taxonomy (Loadshedding, Load Reduction, etc.)"
         tests:
           - unique
           - not_null
+      - name: severity_weight
+        description: "Numerical severity (0.0 to 1.0)"
+      - name: requires_generator
+        description: "Boolean indicating if backup generation is strictly required"
+      - name: impacts_water_pressure
+        description: "Boolean indicating if local water pumping is affected"
+      - name: insurance_exclusion_eligible
+        description: "Boolean indicating if events typically trigger insurance exclusions"
+
+  # ── fct_grid_events ─────────────────────────────────────────────────────────
+  - name: fct_grid_events
+    description: >
+      The core Kimball fact table. An incrementally accumulating, historically
+      permanent record of every discrete grid event (loadshedding, load reduction,
+      load limiting) observed across all monitored areas.
+
+      This table is the primary data source for:
+        - Insurance actuarial queries (12-hour exclusion rule, surge timing)
+        - ESG Scope 2 emission offset calculations (grid uptime per area)
+        - Virtual wheeling settlement reconciliation (area uptime vs generation)
+
+      Mathematical idempotency is guaranteed by the SHA256 surrogate key — the
+      same event processed on multiple pipeline runs will never produce duplicates.
+    columns:
+      - name: event_id
+        description: >
+          **Primary Key.** A deterministic surrogate key generated as the SHA256
+          hash of (area_id + start_time + event_classification). SHA256 is used
+          over MD5 for cryptographic defensibility in financial audit contexts.
+          Guarantees idempotency across unlimited pipeline reruns.
+        tests:
+          - unique
+          - not_null
+
       - name: area_id
-        description: "Foreign key linking the outage event to the static descriptive data in `dim_area`."
+        description: "Foreign key to dim_area.area_id."
         tests:
           - not_null
-          # Referential Integrity Check: Ensures every event maps to a valid area in the dimension table
           - relationships:
               arguments:
                 to: ref('dim_area')
                 field: area_id
-      - name: start_time
-        description: "The strictly cast timestamp indicating the exact beginning of the scheduled grid outage."
-        tests:
-          - not_null
-      - name: end_time
-        description: "The strictly cast timestamp indicating the exact conclusion of the scheduled grid outage."
-        tests:
-          - not_null
-      - name: loadshedding_stage
+
+      - name: event_classification
         description: >
-          The numeric severity stage of the outage, surgically extracted from raw string notes via Regex
-          during the staging phase. Bounded to accepted values 1 through 8.
+          Canonical event type: Loadshedding, Load Reduction, Load Limiting,
+          Water Shedding, or Unclassified. Derived from pattern matching on
+          the raw API note string during staging.
         tests:
           - not_null
-          - accepted_values:
+          - relationships:
               arguments:
-                values: [1, 2, 3, 4, 5, 6, 7, 8]
+                to: ref('dim_event_type')
+                field: event_classification
+
+      - name: event_stage
+        description: >
+          Integer severity stage (1–8) for Loadshedding events. NULL for Load
+          Reduction and other non-staged event types — this is expected and valid.
+
+      - name: start_time
+        description: "Timestamp marking the beginning of the grid event."
+        tests:
+          - not_null
+
+      - name: end_time
+        description: "Timestamp marking the end of the grid event."
+        tests:
+          - not_null
+
       - name: duration_hours
         description: >
-          The total duration of the outage event, calculated natively within the marts layer using DuckDB's
-          `DATE_DIFF` function to provide immediate analytical value to downstream BI dashboards.
+          Pre-computed outage duration in hours (decimal).
+          Key analytical metric for:
+            - Insurance: WHERE duration_hours > 12 (12-hour exclusion clause)
+            - ESG: SUM(duration_hours) to calculate Scope 2 grid downtime offset
+            - Wheeling: aggregate uptime gaps for refund reconciliation
         tests:
           - not_null
+
+      - name: raw_note
+        description: "The original unmodified note string from the API payload. Preserved for audit and debugging."
+
+      - name: dbt_extracted_at
+        description: "Timestamp of the dbt run that inserted this row."
+        tests:
+          - not_null
+
+  # ── fct_pipeline_runs ────────────────────────────────────────────────────────
+  - name: fct_pipeline_runs
+    description: >
+      Observability fact table logging each extraction run. Useful for proving
+      grid uptime when no events are scheduled (zero-event areas) to satisfy
+      insurance requirements.
+    columns:
+      - name: run_id
+        description: "Primary key. Surrogate key generated from run_timestamp."
+        tests:
+          - unique
+          - not_null
+      - name: run_timestamp
+        description: "Timestamp of the extraction run."
+        tests:
+          - not_null
+      - name: areas_processed
+        description: "Number of areas queried during this run."
+      - name: total_events_found
+        description: "Total events across all processed areas."
+      - name: zero_event_areas
+        description: "Comma-separated list of areas that had zero events (grid was up)."
