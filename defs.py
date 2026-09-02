@@ -35,7 +35,7 @@ eskom_update_job = define_asset_job(
 #    Calls per run:    2 (1 per area — search step eliminated via areas_config.yml)
 #    Runs per day:     24 (hourly) → 48 calls/day → 2 buffer calls remaining
 #
-#    Cron: "0 * * * *" = top of every hour
+#    Cron: "0 * * * *" = top of every hour learn this more
 #
 #    To upgrade to 15-minute intervals (Business tier required):
 #      Change PIPELINE_INTERVAL_MINUTES to 15 in .env
