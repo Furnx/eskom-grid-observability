@@ -1,8 +1,0 @@
-eskom_grid_observability:
-  target: dev
-  outputs:
-    dev:
-      type: duckdb
-      path: '../data/eskom_data.duckdb'
-      extensions:
-        - json

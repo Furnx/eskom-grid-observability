@@ -1,0 +1,20 @@
+# ============================================================================
+# dbt Profile Configuration — TEMPLATE
+# ============================================================================
+#
+# Copy this file to `profiles.yml` and adjust the path to your local
+# DuckDB database file.
+#
+#   cp profiles.yml.example profiles.yml
+#
+# profiles.yml is gitignored — your local copy will NOT be committed.
+# ============================================================================
+
+eskom_grid_observability:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: '../data/eskom_data.duckdb'
+      extensions:
+        - json
