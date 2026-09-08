@@ -1,3 +1,3 @@
-area_id,region_type,latitude,longitude,climate_zone
-za_gt_jhb_johannesburg_9hfs,Metropolitan,-26.2041,28.0473,Highveld
-za_wc_cpt_capetowncbd_utix,Metropolitan,-33.9249,18.4241,Mediterranean
+area_id,area_name,municipality,province,region_type,latitude,longitude,climate_zone
+za_gt_jhb_johannesburg_9hfs,Johannesburg,City of Johannesburg,Gauteng,Metropolitan,-26.2041,28.0473,Highveld
+za_wc_cpt_capetowncbd_utix,Cape Town CBD,City of Cape Town,Western Cape,Metropolitan,-33.9249,18.4241,Mediterranean
