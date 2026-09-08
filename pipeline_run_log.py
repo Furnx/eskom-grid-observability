@@ -12,20 +12,31 @@ from dagster import asset, AssetExecutionContext, Output, MetadataValue
     compute_kind="python",
 )
 def pipeline_run_log(context: AssetExecutionContext) -> Output[None]:
-    # Determine what was processed by inspecting the raw data dir
     raw_dir = Path("data/raw")
     areas_processed = 0
     total_events = 0
     zero_event_areas = []
 
-    for file_path in raw_dir.glob("*.json"):
+    # Scan area subdirectories — read only the latest file per area
+    # to avoid overcounting from accumulated historical files.
+    for area_dir in raw_dir.iterdir():
+        if not area_dir.is_dir():
+            continue
+
+        # Find the most recent JSON file in this area's subdirectory
+        json_files = sorted(area_dir.glob("*.json"), reverse=True)
+        if not json_files:
+            continue
+
         areas_processed += 1
-        with open(file_path, "r") as f:
+        latest_file = json_files[0]
+
+        with open(latest_file, "r") as f:
             payload = json.load(f)
             events = payload.get("events", [])
             total_events += len(events)
             if len(events) == 0:
-                zero_event_areas.append(payload.get("_meta", {}).get("area_name", file_path.stem))
+                zero_event_areas.append(payload.get("_meta", {}).get("area_name", area_dir.name))
 
     # Write to DuckDB
     db_path = "data/eskom_data.duckdb"

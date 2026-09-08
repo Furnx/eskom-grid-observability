@@ -2,6 +2,7 @@ import os
 import json
 import yaml
 import requests
+import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 from dagster import asset, AssetExecutionContext, Output, MetadataValue
@@ -29,7 +30,8 @@ def _load_area_config() -> list[dict]:
     description=(
         "Extracts grid event schedules from the EskomSePush API v3.0 for all "
         "areas defined in areas_config.yml. Enforces a strict data contract to "
-        "survive API schema drift and writes one JSON file per area to data/raw/."
+        "survive API schema drift and writes timestamped JSON files per area to "
+        "data/raw/{area_id}/{YYYYMMDD_HHMMSS}.json for historical preservation."
     ),
     group_name="eskom_extraction",
     compute_kind="python",
@@ -40,7 +42,11 @@ def raw_eskom_grid_schedules(context: AssetExecutionContext) -> Output[None]:
 
     Iterates over the area portfolio defined in areas_config.yml, fetches the
     live grid event schedule for each area from the EskomSePush API v3.0, and
-    writes a schema-normalized JSON file to data/raw/{area_id}.json.
+    writes a schema-normalized JSON file to data/raw/{area_id}/{timestamp}.json.
+
+    Each run produces a new timestamped file rather than overwriting previous
+    extractions, preserving the complete raw landing zone for audit trails
+    and historical reprocessing.
 
     Data Contract Enforcements:
         - Reads pre-resolved area_ids from areas_config.yml, eliminating the
@@ -143,7 +149,14 @@ def raw_eskom_grid_schedules(context: AssetExecutionContext) -> Output[None]:
         }
 
         # ── Write to local data lake ─────────────────────────────────────────
-        file_path = output_dir / f"{area_id}.json"
+        # Each area gets its own subdirectory. Each run produces a timestamped
+        # file so raw payloads are preserved for audit and historical reprocessing.
+        # Example: data/raw/za_gt_jhb_johannesburg_9hfs/20260908_083600.json
+        area_dir = output_dir / area_id
+        area_dir.mkdir(parents=True, exist_ok=True)
+
+        run_ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
+        file_path = area_dir / f"{run_ts}.json"
         with open(file_path, "w") as f:
             json.dump(payload, f, indent=4)
 

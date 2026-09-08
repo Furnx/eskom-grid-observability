@@ -6,9 +6,10 @@ sources:
       - name: raw_eskom_grid_schedules
         description: >
           Raw JSON payloads extracted from the EskomSePush API v3.0.
-          One file per monitored area, written to data/raw/{area_id}.json.
-          DuckDB's read_json glob union is used to load all files in a single scan.
+          Files are organized by area subdirectory with UTC timestamps:
+          data/raw/{area_id}/{YYYYMMDD_HHMMSS}.json.
+          DuckDB's read_json recursive glob union loads all files in a single scan.
         meta:
           dagster:
             asset_key: ["raw_eskom_grid_schedules"]
-          external_location: "'../data/raw/*.json'"
+          external_location: "'../data/raw/**/*.json'"
