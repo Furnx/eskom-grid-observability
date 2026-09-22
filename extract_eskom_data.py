@@ -13,7 +13,7 @@ API_KEY = os.getenv("ESKOM_API_KEY")
 # ---------------------------------------------------------------------------
 # Load monitored area portfolio from areas_config.yml
 # ---------------------------------------------------------------------------
-_CONFIG_PATH = Path(__file__).parent / "areas_config.yml"
+_CONFIG_PATH = Path(__file__).parent / "src" / "eskom_grid" / "areas_config.yml"
 
 def _load_area_config() -> list[dict]:
     """Reads the area portfolio from areas_config.yml at the project root."""
