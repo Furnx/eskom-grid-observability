@@ -14,3 +14,6 @@ requests
 # Utilities
 pyyaml
 python-dotenv
+
+# Cloud storage (S3 raw sink)
+boto3
