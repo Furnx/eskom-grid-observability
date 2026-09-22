@@ -7,9 +7,11 @@ sources:
         description: >
           Raw JSON payloads extracted from the EskomSePush API v3.0.
           Files are organized by area subdirectory with UTC timestamps:
-          data/raw/{area_id}/{YYYYMMDD_HHMMSS}.json.
+          {area_id}/{YYYYMMDD_HHMMSS}.json under the raw landing zone.
           DuckDB's read_json recursive glob union loads all files in a single scan.
+          The glob comes from ESKOM_RAW_GLOB (default: the local data/raw directory;
+          the cloud deployment sets s3://<bucket>/raw/**/*.json).
         meta:
           dagster:
             asset_key: ["raw_eskom_grid_schedules"]
-          external_location: "'../data/raw/**/*.json'"
+          external_location: "'{{ env_var('ESKOM_RAW_GLOB', '../data/raw/**/*.json') }}'"
