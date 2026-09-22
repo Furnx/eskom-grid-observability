@@ -49,7 +49,7 @@ graph TD
 
     %% Nodes
     A[EskomSePush API v3.0<br/>Multi-Area Schedules]:::api
-    Config[areas_config.yml<br/>Portfolio Config]:::config
+    Config[eskom_grid/areas_config.yml<br/>Portfolio Config]:::config
     
     subgraph Layer A: Ingestion & Control
         Z[Dagster Daemon & UI]:::dagster
@@ -90,7 +90,7 @@ graph TD
 ### B. Surviving Schema Drift (The Data Contract)
 **The Problem:** When grid outages or load reductions are suspended, the upstream API optimizes its payload by omitting the `events` array entirely, crashing standard auto-inferring ingestion scripts.  
 **The Solution:**
-1. **Python Layer:** The extraction worker intercepts the payload and forcibly injects an empty `events` array (`[]`) and a custom `_meta` wrapper (enriched by `areas_config.yml`) before writing to disk.
+1. **Python Layer:** The extraction worker intercepts the payload and forcibly injects an empty `events` array (`[]`) and a custom `_meta` wrapper (enriched by `src/eskom_grid/areas_config.yml`) before writing to disk.
 2. **DuckDB Layer:** The staging layer utilizes explicit `STRUCT` mapping to strictly define the expected layout in memory, allowing `UNNEST()` functions to safely yield zero rows instead of triggering fatal database crashes.
 
 ### C. Mathematical Idempotency and Historical Accumulation
@@ -129,7 +129,9 @@ PIPELINE_INTERVAL_MINUTES=60
 ```
 
 3. **Configure Monitored Areas:**
-   Edit `areas_config.yml` to define your portfolio. The pipeline will automatically fetch and aggregate data for all defined areas.
+   Edit `src/eskom_grid/areas_config.yml` to define your portfolio. The pipeline will automatically fetch and aggregate data for all defined areas. The portfolio ships inside the package so an installed copy is self-contained; set `ESKOM_AREAS_CONFIG=/path/to/areas.yml` to use a file elsewhere.
+
+   Raw payloads land in `data/raw/` by default. Set `ESKOM_RAW_SINK=s3://bucket/prefix` to write to S3 instead (used by the cloud deployment).
 
 4. **Initialize Dimensions (First Run Only):**
    Run seeds and initialize the incremental tables.

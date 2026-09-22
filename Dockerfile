@@ -22,6 +22,11 @@ RUN pip install --default-timeout=100 --no-cache-dir -r requirements.txt
 # Copy the entire project into the container
 COPY . .
 
+# Install the eskom_grid package itself (editable, so the bind-mounted source
+# in docker-compose is what runs). Dependencies were installed above from
+# requirements.txt, so --no-deps keeps that cached layer doing the work.
+RUN pip install --no-cache-dir --no-deps -e .
+
 # Set up Dagster workspace config
 RUN echo 'workspace:\n  - python_file: defs.py' > $DAGSTER_HOME/workspace.yaml
 

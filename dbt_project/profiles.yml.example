@@ -18,3 +18,14 @@ eskom_grid_observability:
       path: '../data/eskom_data.duckdb'
       extensions:
         - json
+
+    # Cloud deployment target (eskom-grid-cloud). The transform function
+    # downloads the warehouse file from S3 to a writable path, runs dbt, and
+    # uploads it back. httpfs lets DuckDB read s3://.../raw/**/*.json directly;
+    # S3 credentials for DuckDB are configured in Phase 2 of the cloud project.
+    prod:
+      type: duckdb
+      path: "{{ env_var('ESKOM_DUCKDB_PATH', '/tmp/eskom_data.duckdb') }}"
+      extensions:
+        - json
+        - httpfs

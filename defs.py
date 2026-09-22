@@ -2,8 +2,7 @@ import os
 from pathlib import Path
 from dagster import Definitions, define_asset_job, ScheduleDefinition, AssetSelection, load_assets_from_modules
 from dagster_dbt import DbtCliResource, dbt_assets
-import extract_eskom_data
-import pipeline_run_log
+from eskom_grid import assets as eskom_assets
 
 # 1. Point Dagster to the dbt project directory
 dbt_project_dir = Path(__file__).joinpath("..", "dbt_project").resolve()
@@ -19,8 +18,8 @@ def eskom_dbt_assets(context, dbt: DbtCliResource):
     # `dbt build` runs models and their associated tests together
     yield from dbt.cli(["build"], context=context).stream()
 
-# 4. Load the Python extraction assets
-extraction_assets = load_assets_from_modules([extract_eskom_data, pipeline_run_log])
+# 4. Load the Python extraction assets (thin Dagster adapters in eskom_grid.assets)
+extraction_assets = load_assets_from_modules([eskom_assets])
 
 # 5. Define the end-to-end pipeline job (extraction → transformation → tests)
 eskom_update_job = define_asset_job(
