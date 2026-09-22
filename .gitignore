@@ -7,3 +7,10 @@ data/
 *.env
 test_api.py
 profiles.yml
+
+# Logs and build artefacts
+logs/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
