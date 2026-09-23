@@ -188,7 +188,7 @@ def run_extraction(
         uri = sink.write(area_id, summary.run_ts, payload)
         summary.written.append(uri)
         summary.areas_processed += 1
-        log.info(f"  → {event_count} event(s); saved to {uri}")
+        log.info(f"  -> {event_count} event(s); saved to {uri}")
 
     log.info(
         f"Extraction complete: {summary.areas_processed} area(s), "
