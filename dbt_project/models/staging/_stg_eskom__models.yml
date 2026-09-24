@@ -1,13 +1,60 @@
 version: 2
 
 models:
+  - name: stg_eskom__raw_payloads
+    description: >
+      The landing layer: one row per raw JSON file, stored verbatim. This is the
+      only model that reads the raw landing zone; every other model and test
+      reads this table from inside DuckDB instead, so that a cloud run does not
+      re-scan object storage once per model and once per test.
+      Incremental and keyed on the file path, with a compile-time literal cutoff
+      on the file name so already-landed files are never opened again
+      (see ADR 0006 in eskom-grid-cloud).
+    columns:
+      - name: source_file
+        description: "Primary key. Full path of the raw file this row came from."
+        tests:
+          - unique
+          - not_null
+
+      - name: run_ts
+        description: >
+          Extraction run timestamp in UTC, parsed from the file name
+          (YYYYMMDD_HHMMSS). Every area written by one run shares it.
+        tests:
+          - not_null
+
+      - name: _meta
+        description: >
+          Geography block injected by the extraction worker:
+          area_id, area_name, municipality, province.
+
+      - name: events
+        description: >
+          The API's events array, unmodified. Empty when no events are scheduled
+          - the extraction worker injects [] when the API omits the key entirely.
+
+      - name: loaded_at
+        description: >
+          When this row was landed. Rows are not re-read once loaded, so this
+          stays fixed except for the newest run_ts, which is re-read each build
+          so that partially-landed runs are completed.
+
   - name: stg_eskom_grid_schedule
     description: >
       Flattened, typed, and classified staging model for the multi-area
-      EskomSePush API v3.0 grid event payloads. Reads all area JSON files
-      via DuckDB glob union and enforces strict STRUCT schema to survive
-      upstream API schema drift.
+      EskomSePush API v3.0 grid event payloads. Unnests the events array from
+      the landed copy in stg_eskom__raw_payloads rather than reading the raw
+      files, so that tests against this view do not re-scan object storage.
     columns:
+      - name: run_ts
+        description: >
+          Extraction run timestamp in UTC, carried through from the landing
+          table. Note this is UTC while start_time and end_time below are SAST
+          wall-clock; do not compare them without converting.
+        tests:
+          - not_null
+
       - name: area_id
         description: "Pre-resolved EskomSePush API area identifier from areas_config.yml."
         tests:
@@ -29,12 +76,15 @@ models:
           - not_null
 
       - name: start_time
-        description: "Timestamp when the scheduled grid event begins."
+        description: >
+          When the scheduled grid event begins, as SAST wall-clock. The API sends
+          an offset (+02:00) and casting to TIMESTAMP drops it, so the value is
+          local South African time, not UTC.
         tests:
           - not_null
 
       - name: end_time
-        description: "Timestamp when the scheduled grid event ends."
+        description: "When the scheduled grid event ends, as SAST wall-clock (see start_time)."
         tests:
           - not_null
 

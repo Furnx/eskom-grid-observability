@@ -154,21 +154,28 @@ models:
   # ── fct_pipeline_runs ────────────────────────────────────────────────────────
   - name: fct_pipeline_runs
     description: >
-      Observability fact table logging each extraction run. Useful for proving
-      grid uptime when no events are scheduled (zero-event areas) to satisfy
-      insurance requirements.
+      Observability fact table: one row per extraction run, derived entirely
+      from the landed raw files (stg_eskom__raw_payloads) rather than from a
+      locally written log table, so the same numbers are produced on a laptop
+      and in Lambda. Useful for proving grid uptime when no events are scheduled
+      (zero-event areas) to satisfy insurance requirements: "no events" and
+      "the pipeline did not run" are indistinguishable in fct_grid_events.
     columns:
       - name: run_id
-        description: "Primary key. Surrogate key generated from run_timestamp."
+        description: "Primary key. Surrogate key generated from the run's UTC run_ts."
         tests:
           - unique
           - not_null
       - name: run_timestamp
-        description: "Timestamp of the extraction run."
+        description: >
+          UTC timestamp of the extraction run, parsed from the raw file names.
+          UTC, unlike the SAST wall-clock event times in fct_grid_events.
         tests:
           - not_null
       - name: areas_processed
-        description: "Number of areas queried during this run."
+        description: >
+          Number of areas whose payload actually landed for this run. A run cut
+          short by an API failure reports fewer, which is the honest number.
       - name: total_events_found
         description: "Total events across all processed areas."
       - name: zero_event_areas
