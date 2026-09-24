@@ -1,0 +1,15 @@
+{
+    "events": [
+        {
+            "start": "2026-09-24T16:00:00+02:00",
+            "end": "2026-09-24T18:30:00+02:00",
+            "note": "Stage 2"
+        }
+    ],
+    "_meta": {
+        "area_id": "za_gt_jhb_johannesburg_9hfs",
+        "area_name": "Johannesburg",
+        "municipality": "City of Johannesburg",
+        "province": "Gauteng"
+    }
+}
