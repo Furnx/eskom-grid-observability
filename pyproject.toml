@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eskom-grid"
-version = "0.1.0"
+version = "0.3.0"
 description = "Eskom Grid Observability — extraction logic and dbt/DuckDB transformation for EskomSePush loadshedding schedules."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -18,16 +18,26 @@ dependencies = [
 [project.optional-dependencies]
 # Writing to S3 (Lambda gets boto3 from the runtime; containers and laptops do not).
 s3 = ["boto3>=1.34"]
-# Local orchestration and transformation. Never installed into Lambda.
+
+# Running the dbt transformation. Installed into the transform Lambda's image,
+# and depended on by the dagster extra so the pins live in exactly one place.
+# Pinned to minor versions: the landing model relies on DuckDB skipping files
+# for a literal filter on the file name, which is behaviour, not documented API.
+transform = [
+    "dbt-core==1.11.*",
+    "dbt-duckdb==1.10.*",
+    "duckdb==1.5.*",
+]
+
+# Local orchestration. Never installed into either Lambda.
 dagster = [
+    "eskom-grid[transform]",
     "dagster",
     "dagster-webserver",
     "dagster-dbt",
-    "dbt-core>=1.11.0",
-    "dbt-duckdb",
-    "duckdb",
     "python-dotenv",
 ]
+
 dev = ["pytest>=8"]
 
 [tool.setuptools.packages.find]
@@ -39,6 +49,9 @@ eskom_grid = ["areas_config.yml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: builds the real dbt project; a few seconds each. Skip with -m 'not slow'.",
+]
 
 [tool.dagster]
 module_name = "defs"
