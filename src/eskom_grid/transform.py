@@ -9,6 +9,10 @@ dbt is imported *inside* :func:`run_transform`, not at module scope. Importing
 this module therefore costs nothing and pulls in no dbt, so the extraction
 Lambda can install the package without it. ``tests/test_import_boundary.py``
 enforces that.
+
+When :func:`run_transform` returns, the DuckDB database has been closed and the
+file on disk is complete - safe to upload, move or rebuild into, including from
+the same long-lived process.
 """
 
 from __future__ import annotations
@@ -93,6 +97,11 @@ def run_transform(
     # Imported here, not at module scope: the extraction Lambda installs this
     # package without dbt, and merely importing eskom_grid.transform must not
     # require it.
+    #
+    # Both imports happen up front, before the build, rather than where each is
+    # used: an import that failed inside the `finally` below would raise a new
+    # exception there and replace whatever the build itself had raised.
+    from dbt.adapters.duckdb.connections import DuckDBConnectionManager
     from dbt.cli.main import dbtRunner
 
     project_dir = Path(project_dir)
@@ -114,7 +123,21 @@ def run_transform(
 
     log.info(f"dbt build starting (target={target}, project={project_dir}).")
 
-    result = dbtRunner().invoke(args)
+    try:
+        result = dbtRunner().invoke(args)
+    finally:
+        # dbt-duckdb keeps its database handle in a class-level variable, reuses
+        # it across builds while the credentials are unchanged, and only closes
+        # it through an atexit hook. That suits a CLI process, which exits. It
+        # does not suit a warm Lambda, which uploads the file as soon as this
+        # function returns and then runs the next build in the same process:
+        # until the database is closed, the build's tables sit in the .wal next
+        # to a near-empty file, and the next build would reuse a handle to a
+        # file the handler has since replaced. This is dbt-duckdb's own cleanup
+        # hook; dropping its handle lets DuckDB close the database and merge the
+        # .wal. In `finally`, so a failed build releases the file too.
+        DuckDBConnectionManager.close_all_connections()
+
     summary = _summarise(result)
 
     if summary.failed_nodes:
