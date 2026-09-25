@@ -14,10 +14,19 @@ landed with.
 
 A dbt build costs about fifteen seconds, so the read-only assertions share one
 module-scoped build and only the tests that need a second build pay for one.
+
+The Lambda uploads the warehouse file the moment ``run_transform()`` returns, from
+a process that stays alive between invocations. So "the build succeeded" is not
+enough: the file on disk must be complete and released by then. Checks of that
+read from a *separate* process, because inside this one ``duckdb.connect()`` to
+an already-open file returns the open database - including data that exists only
+in its write-ahead log and was never written to the file.
 """
 
 import json
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import duckdb
@@ -64,7 +73,10 @@ def _make_project(tmp_path: Path, monkeypatch) -> dict:
     raw_dir = tmp_path / "raw"
     shutil.copytree(FIXTURE_RAW, raw_dir)
 
-    warehouse = tmp_path / "test.duckdb"
+    # In a folder of its own, as in Lambda (/tmp/...), so a test can delete and
+    # recreate the folder the way the handler does between warm invocations.
+    warehouse = tmp_path / "warehouse" / "test.duckdb"
+    warehouse.parent.mkdir()
 
     # A profile of our own, so the test never depends on the developer's local
     # profiles.yml and never touches the real warehouse.
@@ -99,17 +111,48 @@ def build(project, **kwargs):
 
 
 def query(warehouse: Path, sql: str):
-    """Read from the warehouse.
+    """Read from the warehouse, read-only.
 
-    Deliberately NOT read_only: dbt-duckdb runs in this same process and keeps
-    the database open read-write, and DuckDB refuses a second connection to one
-    file under a different configuration.
+    ``read_only=True`` is also a tripwire. If ``run_transform()`` ever returns
+    with dbt's read-write connection still open, DuckDB refuses a second
+    connection to the same file under a different configuration, and every test
+    using this helper fails. (v0.3.0 dropped ``read_only`` here to get past exactly
+    that error - which hid the bug the Lambda then hit.)
     """
-    con = duckdb.connect(str(warehouse))
+    con = duckdb.connect(str(warehouse), read_only=True)
     try:
         return con.sql(sql).fetchall()
     finally:
         con.close()
+
+
+def query_from_another_process(warehouse: Path, sql: str):
+    """Read the warehouse the way the S3 upload effectively does: from outside.
+
+    A fresh interpreter sees only what is in the file on disk. Data still sitting
+    in the write-ahead log, or a file locked by a connection this process forgot
+    to close, both show up here - and neither shows up in ``query()`` above while
+    that connection is alive.
+    """
+    code = (
+        "import duckdb, json, sys\n"
+        "con = duckdb.connect(sys.argv[1], read_only=True)\n"
+        "print(json.dumps(con.sql(sys.argv[2]).fetchall(), default=str))\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(warehouse), sql],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"another process could not read {warehouse.name}: "
+        f"{result.stderr.strip().splitlines()[-1] if result.stderr.strip() else 'no stderr'}"
+    )
+    return [tuple(row) for row in json.loads(result.stdout)]
+
+
+def wal_of(warehouse: Path) -> Path:
+    return warehouse.with_name(warehouse.name + ".wal")
 
 
 def add_raw_file(raw_dir: Path, area: str, run_ts: str, events: list) -> None:
@@ -267,6 +310,74 @@ def test_files_without_a_run_timestamp_are_ignored(fresh_project):
         warehouse,
         "SELECT COUNT(*) FROM stg_eskom__raw_payloads WHERE run_ts IS NULL OR run_ts = ''",
     )[0][0] == 0
+
+
+# ── the file on disk: what the Lambda actually uploads ────────────────────────
+
+
+def test_database_is_closed_and_complete_when_run_transform_returns(built_once):
+    """The handler uploads the file immediately after ``run_transform()`` returns.
+
+    If dbt's connection were still open, the tables would be in the ``.wal`` and
+    the file itself would be a near-empty shell - uploaded hourly, looking like
+    success.
+    """
+    warehouse = built_once["warehouse"]
+
+    assert not wal_of(warehouse).exists(), (
+        "a .wal file remains after run_transform(): the database was not closed, "
+        "so the file on disk does not contain the build."
+    )
+    assert query_from_another_process(
+        warehouse, "SELECT COUNT(*) FROM stg_eskom__raw_payloads"
+    ) == [(4,)]
+
+
+def test_warm_process_builds_into_a_replaced_file(fresh_project):
+    """Two invocations in one process, with the file replaced in between.
+
+    A warm Lambda reuses its process, and the handler starts each run from a
+    clean /tmp and a freshly downloaded warehouse. dbt-duckdb keeps its database
+    handle in a class-level variable and reuses it when the credentials have not
+    changed, so without an explicit close the second build would write into the
+    first run's file - deleted from the folder, still open by handle - and the
+    file actually uploaded would be missing the new rows.
+
+    Before the fix this fails at a different step per platform: on Linux at the
+    final assertion; on Windows at the delete, because Windows refuses to remove
+    a file another handle still holds open.
+    """
+    raw_dir, warehouse = fresh_project["raw_dir"], fresh_project["warehouse"]
+    later = fresh_project["tmp"] / "later_run"
+
+    # Hold back the 11:00 fixtures so the first build sees only the 10:00 run.
+    for area in (JHB, CPT):
+        (later / area).mkdir(parents=True)
+        shutil.move(str(raw_dir / area / f"{RUN_2}.json"), str(later / area))
+
+    build(fresh_project)
+
+    # What the handler does between invocations: the file goes up to S3, /tmp is
+    # wiped, and the next invocation downloads it to the same path.
+    downloaded = fresh_project["tmp"] / "downloaded.duckdb"
+    shutil.copy2(warehouse, downloaded)
+    shutil.rmtree(warehouse.parent)
+    warehouse.parent.mkdir()
+    shutil.copy2(downloaded, warehouse)
+
+    # The next extraction run lands.
+    for area in (JHB, CPT):
+        shutil.move(str(later / area / f"{RUN_2}.json"), str(raw_dir / area))
+
+    build(fresh_project)
+
+    assert not wal_of(warehouse).exists()
+    assert query_from_another_process(
+        warehouse, "SELECT COUNT(*) FROM stg_eskom__raw_payloads"
+    ) == [(4,)]
+    assert query_from_another_process(
+        warehouse, "SELECT COUNT(*) FROM fct_pipeline_runs"
+    ) == [(2,)]
 
 
 # ── failure behaviour ─────────────────────────────────────────────────────────

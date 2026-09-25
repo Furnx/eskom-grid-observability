@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eskom-grid"
-version = "0.3.0"
+version = "0.3.1"
 description = "Eskom Grid Observability — extraction logic and dbt/DuckDB transformation for EskomSePush loadshedding schedules."
 readme = "README.md"
 requires-python = ">=3.10"
