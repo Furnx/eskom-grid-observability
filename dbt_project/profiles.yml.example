@@ -30,6 +30,15 @@ eskom_grid_observability:
     #   extension_directory : extensions are installed into the image at build
     #                         time, since the function has no network route to
     #                         DuckDB's extension repository at runtime.
+    #                         It MUST sit under config_options, not settings.
+    #                         dbt-duckdb passes config_options to duckdb.connect()
+    #                         and installs the extensions straight after; settings
+    #                         are only applied later, per cursor, with SET. Under
+    #                         settings, the install would already have fallen back
+    #                         to ~/.duckdb - read-only in Lambda. A laptop has a
+    #                         writable home folder and a network, so the mistake
+    #                         only shows in the cloud; tests/test_profiles.py
+    #                         guards it.
     #   secrets             : credential_chain picks up the Lambda execution
     #                         role's credentials from the environment; no keys
     #                         are ever written here.
@@ -40,7 +49,7 @@ eskom_grid_observability:
       extensions:
         - httpfs
         - aws
-      settings:
+      config_options:
         extension_directory: "{{ env_var('DUCKDB_EXTENSION_DIRECTORY', '/opt/duckdb_extensions') }}"
       secrets:
         - type: s3
