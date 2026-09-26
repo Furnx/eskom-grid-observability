@@ -24,6 +24,7 @@ in its write-ahead log and was never written to the file.
 """
 
 import json
+import multiprocessing.synchronize as mp_sync
 import shutil
 import subprocess
 import sys
@@ -46,6 +47,10 @@ CPT = "za_wc_cpt_capetowncbd_utix"
 RUN_1 = "20260924_100000"  # both areas, no events
 RUN_2 = "20260924_110000"  # Johannesburg has a Stage 2 event
 RUN_3 = "20260924_120000"  # added mid-test, to prove only new files are read
+
+# Captured at import, before any test can swap them.
+ORIGINAL_MP_LOCK = mp_sync.Lock
+ORIGINAL_MP_RLOCK = mp_sync.RLock
 
 AREA_META = {
     JHB: {"area_id": JHB, "area_name": "Johannesburg",
@@ -378,6 +383,31 @@ def test_warm_process_builds_into_a_replaced_file(fresh_project):
     assert query_from_another_process(
         warehouse, "SELECT COUNT(*) FROM fct_pipeline_runs"
     ) == [(2,)]
+
+
+# ── no shared memory: what Lambda lacks ───────────────────────────────────────
+
+
+def test_builds_without_posix_semaphores(fresh_project, no_semaphores):
+    """Lambda has no /dev/shm, so no multiprocessing lock can be created there.
+
+    dbt's connection manager, its manifest and Python's ThreadPool each create one
+    regardless of --single-threaded, so without a fallback the build dies before
+    any node runs, with "[Errno 2] No such file or directory". See the
+    ``no_semaphores`` fixture for why every kind of semaphore is refused, not only
+    the two the fallback replaces.
+    """
+    summary = build(fresh_project)
+
+    assert summary.success
+    assert summary.failed == 0
+    assert summary.passed == summary.total_nodes
+
+
+def test_multiprocessing_is_left_alone_where_semaphores_work(built_once):
+    """After a normal build on a laptop, the standard library is untouched."""
+    assert mp_sync.Lock is ORIGINAL_MP_LOCK
+    assert mp_sync.RLock is ORIGINAL_MP_RLOCK
 
 
 # ── failure behaviour ─────────────────────────────────────────────────────────
