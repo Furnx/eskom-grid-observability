@@ -61,6 +61,45 @@ _FAILURE_STATUSES = {"error", "fail", "runtime error"}
 _SKIPPED_STATUSES = {"skipped"}
 
 
+def _use_thread_locks_if_no_semaphores(log: LogLike | None = None) -> bool:
+    """Fall back to thread locks where multiprocessing locks cannot be created.
+
+    AWS Lambda has no /dev/shm, so the POSIX semaphores behind every
+    multiprocessing lock fail with "[Errno 2] No such file or directory". dbt
+    creates such locks anyway (in each adapter's connection manager and in the
+    manifest), and so does the ThreadPool it always starts, --single-threaded
+    or not. They are only ever shared between threads of this one process, so
+    thread locks give the same protection.
+
+    This probes for the capability rather than checking for Lambda: it tries to
+    create one semaphore, and only if that fails swaps ``Lock`` and ``RLock`` in
+    ``multiprocessing.synchronize``. Where semaphores work - a laptop, Docker,
+    Dagster - nothing is touched. Where they don't, nothing in the process could
+    have used them anyway. The context's ``Lock()`` and ``RLock()`` import those
+    two names on every call, so the swap covers every caller whatever it
+    imported first. Once swapped, the probe succeeds, so calling this again (a
+    warm Lambda does, every invocation) changes nothing.
+
+    Returns:
+        True if the swap was made by this call.
+    """
+    import multiprocessing.synchronize as mp_sync
+    import threading
+
+    try:
+        mp_sync.Lock(ctx=None)  # creates, then drops, one semaphore-backed lock
+    except OSError:
+        mp_sync.Lock = lambda *, ctx=None: threading.Lock()
+        mp_sync.RLock = lambda *, ctx=None: threading.RLock()
+        if log is not None:
+            log.info(
+                "No POSIX semaphores available (no /dev/shm); using thread locks "
+                "for dbt's in-process locking."
+            )
+        return True
+    return False
+
+
 def run_transform(
     project_dir: str | Path,
     *,
@@ -93,6 +132,9 @@ def run_transform(
         TransformError: if the build failed, listing the failing nodes.
     """
     log = log or logging.getLogger(__name__)
+
+    # Before dbt creates any lock. See the function for why.
+    _use_thread_locks_if_no_semaphores(log)
 
     # Imported here, not at module scope: the extraction Lambda installs this
     # package without dbt, and merely importing eskom_grid.transform must not
